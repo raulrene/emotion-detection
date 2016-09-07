@@ -12,6 +12,8 @@ import com.facebook.react.shell.MainReactPackage;
 
 import java.util.Arrays;
 import java.util.List;
+import com.RNFetchBlob.RNFetchBlobPackage;
+import com.rnfs.RNFSPackage;
 
 public class MainApplication extends Application implements ReactApplication {
 
@@ -25,13 +27,15 @@ public class MainApplication extends Application implements ReactApplication {
     protected List<ReactPackage> getPackages() {
       return Arrays.<ReactPackage>asList(
           new MainReactPackage(),
-            new RCTCameraPackage()
-      );
+          new RCTCameraPackage(),
+          new RNFetchBlobPackage(),
+          new RNFSPackage()
+        );
     }
   };
 
   @Override
   public ReactNativeHost getReactNativeHost() {
-      return mReactNativeHost;
+    return mReactNativeHost;
   }
 }
