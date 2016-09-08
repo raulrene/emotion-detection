@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "base-64": "^0.1.0",
+    "lodash": "^4.15.0",
     "react": "15.3.1",
     "react-native": "0.32.0",
     "react-native-camera": "git+https://github.com/lwansbrough/react-native-camera.git",

@@ -4,6 +4,8 @@ import styles from './style';
 import RNFB from 'react-native-fetch-blob';
 import RNFS from 'react-native-fs';
 import apiKey from './api-key';
+import _ from 'lodash';
+
 var base64 = require('base-64');
 
 import {
@@ -31,7 +33,7 @@ const MainView = React.createClass({
     render() {
         const state = this.state;
 
-        this.getVideoResult('https://api.projectoxford.ai/emotion/v1.0/operations/21a3b390-ae12-4a24-a719-11f31d333ed0');
+        this.getVideoResult('https://api.projectoxford.ai/emotion/v1.0/operations/db8613ce-bfc4-4e28-a9ca-1c122064f864');
 
         return (
             <View style={styles.container}>
@@ -109,7 +111,7 @@ const MainView = React.createClass({
                             console.log('Error reading stream', err);
                         })
                         ifstream.onEnd(() => {  
-                            console.log('Finished reading stream');
+                            console.log('Finished reading stream. Uploading...');
 
                             // Upload the stream to the emotion API
                             RNFB.fetch('POST', 'https://api.projectoxford.ai/emotion/v1.0/recognizeinvideo', 
@@ -123,6 +125,7 @@ const MainView = React.createClass({
                                 // The Emotion API responds with an Operation-Location header
                                 // That location should be further queried for emotion data
                                 view.getVideoResult(res.respInfo.headers['Operation-Location']);
+                                console.log('Uploaded successfully!');
                             })
                             .catch((err) => {
                                 console.error('Error', err);
@@ -148,6 +151,7 @@ const MainView = React.createClass({
     },
 
     getVideoResult(location) {
+        const view = this;
         console.log('Getting video result from location', location);
 
         setTimeout(() => {
@@ -158,14 +162,12 @@ const MainView = React.createClass({
                 // Check if the processing is done
                 if (response.status === 'Succeeded') {
                     const processedResult = JSON.parse(response.processingResult);
-                    
-                    // TODO: We should parse the result and store useful data
-                    processedResult.fragments.forEach((el, index) => {
-                        console.log(el);
-                    });
+                    view.parseVideoResult(processedResult.fragments);
                 } 
+
                 // Else if it's still processing (not failed) try to get the results again
-                else if (response.status !== 'Failed') {
+                else if (response.status && response.status !== 'Failed') {
+                    console.log(`Stream status is ${response.status}. Retrying...`);
                     view.getVideoResult(location);
                 }
             })
@@ -173,6 +175,48 @@ const MainView = React.createClass({
                 console.error('Error', err);
             });
         }, 2000);
+    },
+
+    parseVideoResult(fragments) {
+        const emotions = {
+            neutral: [],
+            happiness: [],
+            surprise: [],
+            sadness: [],
+            anger: [],
+            disgust: [],
+            fear: [],
+            contempt: []
+        };
+        /* 
+        windowMeanScores gives a mean score for all of the faces detected in a frame for each emotion. The emotion detected should be interpreted as the emotion with the highest score, as scores are normalized to sum to one. 
+        windowFaceDistribution gives the distribution of faces with each emotion as the dominant emotion for that face. Dominant emotions for each face have been determined based on the emotion with the highest score for that face. 
+        */
+        let windowMeanScores = _.cloneDeep(emotions);
+        let windowFaceDistribution = _.cloneDeep(emotions);
+
+        // The data is stored a little weird (fragment: { events: [ [ { <actual_useful_data> } ] ] })
+        // Probably the inner array is for multiple faces
+        // Not to worry about performance though, the events array is usually (always?) of length 1 and 1
+        fragments.forEach((fragment, index) => {
+        
+            // Ignore the first fragment as usually the first parts are not concludent
+            if (index === 0) {
+                return;
+            }
+
+            fragment.events.forEach((event) => {
+                event.forEach((el) => {
+                    _.each(emotions, (val, emotion) => {
+                        windowMeanScores[emotion].push(el.windowMeanScores[emotion]);
+                        windowFaceDistribution[emotion].push(el.windowFaceDistribution[emotion]);
+                    });
+                });
+            });
+        });
+
+        console.log('Window Face Distribution:', windowFaceDistribution);
+        console.log('Window Mean Scores:', windowMeanScores);
     }
 });
 
