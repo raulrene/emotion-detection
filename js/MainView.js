@@ -6,7 +6,8 @@ import RNFS from 'react-native-fs';
 import apiKey from './api-key';
 import _ from 'lodash';
 
-var base64 = require('base-64');
+const base64 = require('base-64');
+const TIMEOUT = 20000; // 20 seconds
 
 import {
   Dimensions,
@@ -32,8 +33,6 @@ const MainView = React.createClass({
 
     render() {
         const state = this.state;
-
-        this.getVideoResult('https://api.projectoxford.ai/emotion/v1.0/operations/db8613ce-bfc4-4e28-a9ca-1c122064f864');
 
         return (
             <View style={styles.container}>
@@ -124,8 +123,10 @@ const MainView = React.createClass({
                             .then((res) => {
                                 // The Emotion API responds with an Operation-Location header
                                 // That location should be further queried for emotion data
-                                view.getVideoResult(res.respInfo.headers['Operation-Location']);
-                                console.log('Uploaded successfully!');
+                                console.log(`Uploaded successfully! Processing in ${TIMEOUT / 1000} seconds...`);
+                                setTimeout(() => {
+                                    view.getVideoResult(res.respInfo.headers['Operation-Location']);
+                                }, TIMEOUT);
                             })
                             .catch((err) => {
                                 console.error('Error', err);
@@ -152,29 +153,37 @@ const MainView = React.createClass({
 
     getVideoResult(location) {
         const view = this;
-        console.log('Getting video result from location', location);
+        console.log(`Getting video result from location ${location}`);
 
-        setTimeout(() => {
-            RNFB.fetch('GET', location, {'Ocp-Apim-Subscription-Key': apiKey})
-            .then((res) => {
-                const response = res.json();
+        RNFB.fetch('GET', location, {'Ocp-Apim-Subscription-Key': apiKey})
+        .then((res) => {
+            const response = res.json();
 
-                // Check if the processing is done
-                if (response.status === 'Succeeded') {
-                    const processedResult = JSON.parse(response.processingResult);
-                    view.parseVideoResult(processedResult.fragments);
-                } 
+            // Check if the processing is done
+            if (response.status === 'Succeeded') {
+                const processedResult = JSON.parse(response.processingResult);
+                view.parseVideoResult(processedResult.fragments);
+            } 
 
-                // Else if it's still processing (not failed) try to get the results again
-                else if (response.status && response.status !== 'Failed') {
-                    console.log(`Stream status is ${response.status}. Retrying...`);
+            // Else if it's still processing (not failed) try to get the results again
+            else if (response.status && response.status !== 'Failed') {
+                console.log(`Stream status is '${response.status}'. Retrying...`);
+                setTimeout(() => {
                     view.getVideoResult(location);
-                }
-            })
-            .catch((err) => {
-                console.error('Error', err);
-            });
-        }, 2000);
+                }, TIMEOUT);
+            } 
+
+            // Else if rate was exceeeded
+            else if (response.code === 'RateLimitExceeded') {
+                console.log('Rate Limit Exceeded. Retrying...');
+                setTimeout(() => {
+                    view.getVideoResult(location);
+                }, TIMEOUT * 2);
+            }
+        })
+        .catch((err) => {
+            console.error('Error', err);
+        });
     },
 
     parseVideoResult(fragments) {
